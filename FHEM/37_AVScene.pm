@@ -43,8 +43,9 @@ sub AVScene_Initialize($) {
     ."commands:textField-long "
     ."deviceAudio "
     ."deviceMedia "
-    ."deviceVideo "
+    ."deviceInput "
     ."disable:0,1 "
+    ."inputSelection:textField-long "
     ."sequeceOn "
     ."sequeceOff "
     .$readingFnAttributes
@@ -60,9 +61,12 @@ sub AVScene_Define($$) {
     "Usage: define <name> $TYPE [<dev1>] [<dev2>] [<dev3>] ..."
   ) unless(@DEVICES);
   my $DEVICES = join(",", @DEVICES);
+  my $DevAttrList = $modules{$TYPE}{AttrList};
+  $DevAttrList =~ s/deviceAudio\S*/deviceAudio:$DEVICES/;
+  $DevAttrList =~ s/deviceMedia\S*/deviceMedia:$DEVICES/;
 
   $hash->{DEVICES} = $DEVICES;
-
+  setDevAttrList($SELF, "$DevAttrList");
   readingsSingleUpdate($hash, "state", "Initialized", 1);
 
   return;
@@ -148,10 +152,13 @@ sub AVScene_Attr(@) {
 # commandref ##################################################################
 =pod
 =item helper
-=item summary    controlls different WLAN LED Controller
-=item summary_DE steuert verschiedene WLAN LED Controller
+=item summary    
+=item summary_DE 
 
 =begin html
 
 =end html
+=begin html_DE
+
+=end html_DE
 =cut
