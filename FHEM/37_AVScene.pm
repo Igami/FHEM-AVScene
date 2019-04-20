@@ -43,11 +43,10 @@ sub AVScene_Initialize($) {
     ."commands:textField-long "
     ."deviceAudio "
     ."deviceMedia "
-    ."deviceInput "
-    ."disable:0,1 "
-    ."inputSelection:textField-long "
-    ."sequeceOn "
-    ."sequeceOff "
+    ."disable:1,0 "
+    ."inputSelection:textField "
+    ."sequeceOff:textField-long "
+    ."sequeceOn:textField-long "
     .$readingFnAttributes
   ;
 }
@@ -55,18 +54,29 @@ sub AVScene_Initialize($) {
 # regular Fn ##################################################################
 sub AVScene_Define($$) {
   my ($hash, $def) = @_;
-  my ($SELF, $TYPE, @DEVICES) = split(/[\s]+/, $def);
+  my ($SELF, $TYPE, @devices) = split(/[\s]+/, $def);
 
   return(
     "Usage: define <name> $TYPE [<dev1>] [<dev2>] [<dev3>] ..."
-  ) unless(@DEVICES);
-  my $DEVICES = join(",", @DEVICES);
-  my $DevAttrList = $modules{$TYPE}{AttrList};
-  $DevAttrList =~ s/deviceAudio\S*/deviceAudio:$DEVICES/;
-  $DevAttrList =~ s/deviceMedia\S*/deviceMedia:$DEVICES/;
+  ) unless(@devices);
 
-  $hash->{DEVICES} = $DEVICES;
+  my $devices = join(",", sort(@devices));
+
+  return("It's not allowed to add AVScene to itself.") if($devices =~ /$SELF/);
+
+  my $type = devspec2array("$devices:FILTER=TYPE!=$TYPE") ? "scene" : "sceneSwitcher";
+  my %inputSelection = map{$_, "input_$_:".join(",", (split(" ", CommandSet(undef , "$_ ?")))[6..int(split(" ", CommandSet(undef , "$_ ?"))-1)])} split(",", $devices);
+  $inputSelection{"input_$_"} = delete $inputSelection{$_} foreach (keys %inputSelection);
+  my $DevAttrList = $modules{$TYPE}{AttrList};
+  $DevAttrList =~ s/deviceAudio\S*/deviceAudio:$devices/;
+  $DevAttrList =~ s/deviceMedia\S*/deviceMedia:$devices/;
+
+  $hash->{devices} = $devices;
+  $hash->{type} = $type;
+  $hash->{inputSelection} = \%inputSelection;
+
   setDevAttrList($SELF, "$DevAttrList");
+
   readingsSingleUpdate($hash, "state", "Initialized", 1);
 
   return;
@@ -94,8 +104,8 @@ sub AVScene_Set($@) {
   my %AVScene_sets = (
      "channelDown"  => "channelDown:noArg"
     ,"channelUp"    => "channelUp:noArg"
-    ,"deviceAdd"    => "deviceAdd:textField"
-    ,"deviceRemove" => "deviceremove:textField"
+    ,"deviceAdd"    => "deviceAdd:".join(",", devspec2array(".+"))
+    ,"deviceRemove" => "deviceRemove:$hash->{devices}"
     ,"mute"         => "mute:noArg"
     ,"off"          => "off:noArg"
     ,"on"           => "on:noArg"
@@ -105,11 +115,31 @@ sub AVScene_Set($@) {
     ,"volumeDown"   => "volumeDown:noArg"
     ,"volumeUp"     => "volumeUp:noArg"
   );
+  %AVScene_sets = (%AVScene_sets, %{$hash->{inputSelection}});  
 
   return(
     "Unknown argument $argument, choose one of ".
     join(" ", sort(values %AVScene_sets))
   ) unless(exists($AVScene_sets{$argument}));
+
+  if
+  ($argument =~ /^device(Add|Remove)$/){
+    my %devices = map{$_, 1} split(",", $hash->{devices}.",$value");
+    delete $devices{$value} if($argument eq "deviceRemove");
+    my $devices = join(" ", sort(keys %devices));
+
+    CommandDefMod(undef, "$SELF $TYPE $devices");
+  }
+  elsif
+  ($argument =~ /^input_(.+)$/){
+    my $device = $1;
+    my $inputSelection = AttrVal($SELF, "inputSelection", undef);
+    $inputSelection =~ s/$device:[^,]+//g;
+    $inputSelection = join(",", sort(split(",", $inputSelection), "$device:$value"));
+    $inputSelection =~ s/^,+//;
+
+    CommandAttr(undef, "$SELF inputSelection $inputSelection");
+  }
 
   return;
 }
@@ -143,6 +173,14 @@ sub AVScene_Attr(@) {
   my $TYPE = $hash->{TYPE};
 
   Log3($SELF, 5, "$TYPE ($SELF) - entering AVScene_Attr");
+
+    # ."commands:textField-long "
+    # ."deviceAudio "
+    # ."deviceMedia "
+    # ."disable:1,0 "
+    # ."inputSelection:textField-long "
+    # ."sequeceOff:textField-long "
+    # ."sequeceOn:textField-long "
 
   return;
 }

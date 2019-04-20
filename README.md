@@ -1,5 +1,5 @@
 # AVScene
-  AVScene ist ein Hilfsmodul das Szenen für Video- oder Audiokonsum steuert.
+  AVScene ist ein Hilfsmodul das Szenen für Audio- und Videokonsum steuert.
   
 ## Define
   `define <name> AVScene [<dev1>] [<dev2>] [<dev3>] ...`  
@@ -18,7 +18,7 @@ Medien-Steuerung:
  * `channelDown`
  * weitere Befehle durch das `commands`-Attribut
 
- Modul-Erweiterung:
+ Definitionserweiterung:
  * `deviceAdd <name>`
  * `deviceRemove <name>`
 
