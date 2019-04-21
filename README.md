@@ -5,7 +5,15 @@
   `define <name> AVScene [<dev1>] [<dev2>] [<dev3>] ...`  
 
 ## Set
-Medien-Steuerung:
+Erweiterung:
+ * `deviceAdd <name>`
+ * `deviceRemove <name>`
+ * `deviceMedia <name>`
+ * `deviceVolume <name>`
+ * `input_<name>`
+ * `updateInputSelection`
+
+Steuerung:
  * `on`
  * `off`
  * `play`
@@ -18,10 +26,6 @@ Medien-Steuerung:
  * `channelDown`
  * weitere Befehle durch das `commands`-Attribut
 
- Definitionserweiterung:
- * `deviceAdd <name>`
- * `deviceRemove <name>`
-
 ## Get
  * `defaultSequence on|off`
 
@@ -33,6 +37,7 @@ Medien-Steuerung:
  * `deviceAudio <name>`
  * `deviceMedia <name>`
  * `disable 0|1`
+ * `evalSpecials <key>=<value>`
  * `inputSelection <name>:<FHEM command>`
  * `sequeceOn <name>:<FHEM command>`
  * `sequeceOff <name>:<FHEM command>`
