@@ -3,7 +3,7 @@
 
 # copyright ###################################################################
 #
-# 37_ACScene.pm
+# 37_AVScene.pm
 #
 # Copyright by igami
 #
@@ -26,6 +26,8 @@ package main;
   use strict;
   use warnings;
 
+use List::Util qw(min max);
+
 # variables ###################################################################
 my %AVScene_defaultDelays = (
    "input"        => 1000
@@ -44,6 +46,7 @@ sub AVScene_Get($@);
 sub AVScene_Attr(@);
 
 sub AVScene_evalSpecials($;$);
+sub AVScene_handleSequence($$);
 sub AVScene_update_deviceCommands($);
 sub AVScene_sequence_power($);
 
@@ -131,7 +134,8 @@ sub AVScene_Set($@) {
   if
   (AttrVal($SELF, "configMode", 0)){
     %AVScene_sets = (
-       "deviceAdd"    => "deviceAdd:".join(",", devspec2array(".+"))
+       "config"       => "config:done"
+      ,"deviceAdd"    => "deviceAdd:".join(",", devspec2array(".+"))
       ,"deviceMedia"  => "deviceMedia:$hash->{devices}"
       ,"deviceRemove" => "deviceRemove:$hash->{devices}"
       ,"deviceVolume" => "deviceVolume:$hash->{devices}"
@@ -143,17 +147,22 @@ sub AVScene_Set($@) {
   }
   else{
     %AVScene_sets = (
-       "channelDown"  => "channelDown:noArg"
-      ,"channelUp"    => "channelUp:noArg"
-      ,"mute"         => "mute:noArg"
+      "config"       => "config:noArg"
       ,"off"          => "off:noArg"
       ,"on"           => "on:noArg"
+    );
+    %AVScene_sets = (%AVScene_sets
+      ,"mute"         => "mute:noArg"
+      ,"volumeDown"   => "volumeDown:noArg"
+      ,"volumeUp"     => "volumeUp:noArg"
+    ) if(AttrVal($SELF, "deviceVolume", undef));
+    %AVScene_sets = (%AVScene_sets
+      ,"channelDown"  => "channelDown:noArg"
+      ,"channelUp"    => "channelUp:noArg"
       ,"pause"        => "pause:noArg"
       ,"play"         => "play:noArg"
       ,"stop"         => "stop:noArg"
-      ,"volumeDown"   => "volumeDown:noArg"
-      ,"volumeUp"     => "volumeUp:noArg"
-    );
+    ) if(AttrVal($SELF, "deviceMedia", undef));
   }
 
   return(
@@ -171,7 +180,19 @@ sub AVScene_Set($@) {
   }
   elsif
   ($argument =~ /^(off|on)/){
-    return("Not implemented yet :(");
+    AVScene_handleSequence($hash, $1);
+    # return("Not implemented yet :(");
+  }
+  elsif
+  ($argument eq "config"){
+    if
+    ($value){
+      CommandDeleteAttr(undef, "$SELF configMode");
+    }
+    else
+    {
+      CommandAttr(undef, "$SELF configMode 1");
+    }
   }
   elsif
   ($argument =~ /^device(Add|Remove)$/){
@@ -300,12 +321,10 @@ sub AVScene_Attr(@) {
     InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|on");
   }
   elsif
-  ($argument eq "sequenceOff"){
-
-  }
-  elsif
-  ($argument eq "sequenceOn"){
-
+  ($argument =~ /sequence(On|Off)/){
+    $value =~ s/\n//g;
+    $value =~ s/,/,\n/g;
+    $_[3] = $value;
   }
 
   return;
@@ -326,6 +345,96 @@ sub AVScene_evalSpecials($;$) {
   $hash->{evalSpecials} = \%evalSpecials;
 
   return;
+}
+
+sub AVScene_handleSequence($$) {
+  my ($hash, $sequence) = @_;
+  my $SELF = $hash->{NAME};
+  my $TYPE = $hash->{TYPE};
+
+  Log3($SELF, 5, "$TYPE ($SELF) - entering AVScene_blocking_handleSequence");
+
+  my (undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));  
+  $sequence = AttrVal($SELF, "sequence".ucfirst($sequence), undef);
+  $sequence =~ s/\n//g;
+  my %delay = map{$_, 0} split(",", $hash->{devices});
+  my @sequence;
+
+  if
+  ($sequence){
+    @sequence = split(",", $sequence);
+    for (my $i=0; $i<int(@sequence); $i++){
+      $sequence[$i] =~ m/(.+):(.+)/;
+      $sequence[$i] = "sleep ".($delay{$1}/1000)."; set $1 $2;";
+
+      foreach my $device (keys %delay){
+        next if($device eq $1);
+        $delay{$device} = max($delay{$device}, ($delay{$1}+AttrVal($1, "delay_interDevice", $AVScene_defaultDelays{interDevice})));
+      }
+
+      if
+      ($2 eq "on"){
+        $delay{$1} += AttrVal($1, "delay_powerOn", $AVScene_defaultDelays{powerOn});
+      }
+      elsif
+      (%{$inputSelection}{$1} eq $2){
+        $delay{$1} += AttrVal($1, "delay_input", $AVScene_defaultDelays{input});
+      }
+      else{
+        $delay{$1} += AttrVal($1, "delay_interKey", $AVScene_defaultDelays{interKey});
+      }
+    }
+  }
+
+  AnalyzeCommandChain(undef, join(" ", @sequence));
+
+  return($hash);
+}
+
+sub AVScene_sequence_power($) {
+  my ($SELF, $command, $get) = split("\\|", shift);
+  my $Command = ucfirst($command);
+  my ($hash) = $defs{$SELF};
+  my $TYPE = $hash->{TYPE};
+  my $devices = $hash->{devices};
+  my (%commandsPower, %commands, @ret);
+  my(undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));
+
+  if
+  ($command eq "on"){
+    # handle commands on
+    $commandsPower{"$_:on"} = AttrVal($_, "delay_powerOn", $AVScene_defaultDelays{powerOn})
+      for(split(",", $devices));
+    foreach (sort { $commandsPower{$b} <=> $commandsPower{$a} } keys %commandsPower) {
+      push(@ret, $_);
+    }
+    # handle commands input
+    $commands{"$_:$inputSelection->{$_}"} = AttrVal($_, "delay_input", $AVScene_defaultDelays{input})
+      for(keys %{$inputSelection});
+  }
+
+  # handle commands other
+  for (split("\n", AttrVal($SELF, "commands$Command", undef))){
+    $_ =~ m/(.+):.+/;
+    $commands{$_} = AttrVal($_, "delay_interKey", $AVScene_defaultDelays{interKey});
+  }
+  foreach (sort { $commands{$a} <=> $commands{$b} } keys %commands) {
+    push(@ret, $_);
+  }
+
+  if
+  ($command eq "off"){
+    # handle commands off
+    $commandsPower{"$_:off"} = AttrVal($_, "delay_interKey", $AVScene_defaultDelays{interKey}) 
+      for(split(",", $devices));
+    foreach (sort { $commandsPower{$b} <=> $commandsPower{$a} } keys %commandsPower) {
+      push(@ret, $_);
+    }
+  }
+
+  return join("\n", @ret) if($get);
+
+  CommandAttr(undef, "$SELF sequence$Command ".join(",", @ret)) if(AttrVal($SELF, "autocreate", 1));
 }
 
 sub AVScene_update_deviceCommands($) {
@@ -357,52 +466,6 @@ sub AVScene_update_deviceCommands($) {
   $hash->{inputSelection} = \%inputSelection;
 
   return;
-}
-
-sub AVScene_sequence_power($) {
-  my ($SELF, $command, $get) = split("\\|", shift);
-  my $Command = ucfirst($command);
-  my ($hash) = $defs{$SELF};
-  my $TYPE = $hash->{TYPE};
-  my $devices = $hash->{devices};
-  my (%commandsPower, %commands, @ret);
-  my(undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));
-
-  if
-  ($command eq "on"){
-    # handle commands on
-    $commandsPower{"$_:on"} = AttrVal($_, "delay_powerOn", $AVScene_defaultDelays{powerOn}) 
-      for(split(",", $devices));
-    foreach (sort { $commandsPower{$b} <=> $commandsPower{$a} } keys %commandsPower) {
-      push(@ret, $_);
-    }
-    # handle commands input
-    $commands{"$_:$inputSelection->{$_}"} = AttrVal($_, "delay_input", $AVScene_defaultDelays{input}) 
-      for(keys %{$inputSelection});
-  }
-
-  # handle commands other
-  for (split("\n", AttrVal($SELF, "commands$Command", undef))){
-    $_ =~ m/(.+):.+/;
-    $commands{$_} = AttrVal($_, "delay_interKey", $AVScene_defaultDelays{interKey});
-  }
-  foreach (sort { $commands{$a} <=> $commands{$b} } keys %commands) {
-    push(@ret, $_);
-  }
-
-  if
-  ($command eq "off"){
-    # handle commands off
-    $commandsPower{"$_:off"} = AttrVal($_, "delay_interKey", $AVScene_defaultDelays{interKey}) 
-      for(split(",", $devices));
-    foreach (sort { $commandsPower{$b} <=> $commandsPower{$a} } keys %commandsPower) {
-      push(@ret, $_);
-    }
-  }
-
-  return join("\n", @ret) if($get);
-
-  CommandAttr(undef, "$SELF sequence$Command ".join(",\n", @ret)) if(AttrVal($SELF, "autocreate", 1));
 }
 
 1;
