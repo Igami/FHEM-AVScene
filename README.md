@@ -6,6 +6,7 @@
 
 ## Set
 Erweiterung:
+ * `commandsOn_<name>`
  * `deviceAdd <name>`
  * `deviceRemove <name>`
  * `deviceMedia <name>`
@@ -33,13 +34,16 @@ Steuerung:
 * `state Initialized|play|pause|stop|off`
 
 ## Attribute
+ * `autocreate 1|0`
  * `commands <command>:<FHEM command>`
+ * `commandsOff <name>:<set>`
+ * `commandsOn <name>:<set>`
  * `configMode 1|0`
  * `deviceAudio <name>`
  * `deviceMedia <name>`
  * `disable 0|1`
  * `evalSpecials <key>=<value>`
- * `inputSelection <name>:<FHEM command>`
- * `sequeceOn <name>:<FHEM command>`
- * `sequeceOff <name>:<FHEM command>`
+ * `inputSelection <name>=<FHEM command>`
+ * `sequecneOn <name>:<FHEM command>`
+ * `sequecneOff <name>:<FHEM command>`
  * [`readingFnAttributes`](#readingFnAttributes)

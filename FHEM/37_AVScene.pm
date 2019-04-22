@@ -35,6 +35,17 @@ my %AVScene_defaultDelays = (
 );
 
 # forward declarations ########################################################
+sub AVScene_Initialize($);
+
+sub AVScene_Define($$);
+sub AVScene_Undefine($$);
+sub AVScene_Set($@);
+sub AVScene_Get($@);
+sub AVScene_Attr(@);
+
+sub AVScene_evalSpecials($;$);
+sub AVScene_update_deviceCommands($);
+sub AVScene_sequence_power($);
 
 # initialize ##################################################################
 sub AVScene_Initialize($) {
@@ -48,15 +59,18 @@ sub AVScene_Initialize($) {
   $hash->{AttrFn}   = $TYPE."_Attr";
 
   $hash->{AttrList} = ""
+    ."autocreate:1,0 "
     ."commands:textField-long "
+    ."commandsOff:textField-long "
+    ."commandsOn:textField-long "
     ."configMode:1,0 "
     ."deviceVolume "
     ."deviceMedia "
     ."disable:1,0 "
     ."evalSpecials:textField-long "
     ."inputSelection:textField-long "
-    ."sequeceOff:sortable "
-    ."sequeceOn:sortable "
+    ."sequenceOff:sortable "
+    ."sequenceOn:sortable "
     .$readingFnAttributes
   ;
 }
@@ -82,16 +96,17 @@ sub AVScene_Define($$) {
   $hash->{devices} = $devices;
   $hash->{type} = $type;
 
-  AVScene_update_inputSelection($hash);
+  AVScene_update_deviceCommands($hash);
 
   setDevAttrList($SELF, "$DevAttrList");
   
   readingsSingleUpdate($hash, "state", "Initialized", 1);
 
   CommandAttr(undef, "$SELF configMode 1");
+  AVScene_sequence_power("$SELF|on");
+  AVScene_sequence_power("$SELF|off");
 
   return;
-
 }
 
 sub AVScene_Undefine($$) {
@@ -120,9 +135,11 @@ sub AVScene_Set($@) {
       ,"deviceMedia"  => "deviceMedia:$hash->{devices}"
       ,"deviceRemove" => "deviceRemove:$hash->{devices}"
       ,"deviceVolume" => "deviceVolume:$hash->{devices}"
-      ,"updateInputSelection"       => "updateInputSelection:noArg"
+      ,"updateDeviceCommands"       => "updateDeviceCommands:noArg"
     );
-    %AVScene_sets = (%AVScene_sets, %{$hash->{inputSelection}});  
+    %AVScene_sets = (%AVScene_sets, %{$hash->{commandsOn}});
+    %AVScene_sets = (%AVScene_sets, %{$hash->{commandsOff}});
+    %AVScene_sets = (%AVScene_sets, %{$hash->{inputSelection}});
   }
   else{
     %AVScene_sets = (
@@ -177,12 +194,19 @@ sub AVScene_Set($@) {
     CommandAttr(undef, "$SELF inputSelection ".join("\n", @inputSelection));
   }
   elsif
+  ($argument =~ /^command(On|Off)_(.+)$/){
+    my @commands = AttrVal($SELF, "commands$1", undef);
+    push(@commands, "$2:$value");
+
+    CommandAttr(undef, "$SELF commands$1 ".join("\n", sort @commands));
+  }
+  elsif
   ($argument =~ /^device(Media|Volume)$/){
     CommandAttr(undef, "$SELF $argument $value");
   }
   elsif
-  ($argument eq "updateInputSelection"){
-    AVScene_update_inputSelection($hash);
+  ($argument eq "updateDeviceCommands"){
+    AVScene_update_deviceCommands($hash);
   }
 
   return;
@@ -212,11 +236,12 @@ sub AVScene_Get($@) {
   ($argument eq "defaultSequence"){
     if
     ($value eq "on"){
-      return AVScene_sequence_on($hash);
+      return AVScene_sequence_power("$SELF|on|1");
       return("Not implemented yet :(");
     }
     elsif
     ($value eq "off"){
+      return AVScene_sequence_power("$SELF|off|1");
       $ret = "set $hash->{devices} off";
     }
   }
@@ -231,15 +256,56 @@ sub AVScene_Attr(@) {
 
   Log3($SELF, 5, "$TYPE ($SELF) - entering AVScene_Attr");
 
-    # ."commands:textField-long "
-    # ."sequeceOff:textField-long "
-    # ."sequeceOn:textField-long "
-
   if
+  ($argument eq "autocreate"){
+    InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|on");
+    InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|off");
+  }
+  elsif
+  ($argument eq "commands"){
+
+  }
+  elsif
+  ($argument eq "commandsOff"){
+    InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|off");
+  }
+  elsif
+  ($argument eq "commandsOn"){
+    InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|on");
+  }
+  elsif
+  ($argument eq "configMode"){
+
+  }
+  elsif
+  ($argument eq "deviceVolume"){
+
+  }
+  elsif
+  ($argument eq "deviceMedia"){
+
+  }
+  elsif
+  ($argument eq "disable"){
+
+  }
+  elsif
   ($argument eq "evalSpecials"){
     AVScene_evalSpecials($hash, $value);
 
     Log3($SELF, 5, "$TYPE ($SELF) - evalSpecials $hash->{evalSpecials}");
+  }
+  elsif
+  ($argument eq "inputSelection"){
+    InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|on");
+  }
+  elsif
+  ($argument eq "sequenceOff"){
+
+  }
+  elsif
+  ($argument eq "sequenceOn"){
+
   }
 
   return;
@@ -262,12 +328,12 @@ sub AVScene_evalSpecials($;$) {
   return;
 }
 
-sub AVScene_update_inputSelection($) {
+sub AVScene_update_deviceCommands($) {
   my ($hash) = @_;
   my $TYPE = $hash->{TYPE};
   my $SELF = $hash->{NAME};
   my $devices = $hash->{devices};
-  my %inputSelection;
+  my (%commandsOn, %commandsOff, %inputSelection);
 
   for my $device (split(",", $devices)){
     my @sets = split(" ", CommandSet(undef , "$device ?"));
@@ -278,33 +344,65 @@ sub AVScene_update_inputSelection($) {
       
       $sets[$i] = join(",", map{"$1#$_"} split(",", $2));
     }
+    
+    my $commands = join(",", sort(@sets));
 
-    $inputSelection{"input_$device"} = "input_$device:".join(",", sort(@sets));
+    $commandsOn{"commandOn_$device"}  = "commandOn_$device:$commands";
+    $commandsOn{"commandOff_$device"} = "commandOff_$device:$commands";
+    $inputSelection{"input_$device"}  = "input_$device:$commands";
    }
 
+  $hash->{commandsOn} = \%commandsOn;
+  $hash->{commandsOff} = \%commandsOff;
   $hash->{inputSelection} = \%inputSelection;
 
   return;
 }
 
-sub AVScene_sequence_on($) {
-  my ($hash) = @_;
+sub AVScene_sequence_power($) {
+  my ($SELF, $command, $get) = split("\\|", shift);
+  my $Command = ucfirst($command);
+  my ($hash) = $defs{$SELF};
   my $TYPE = $hash->{TYPE};
-  my $SELF = $hash->{NAME};
   my $devices = $hash->{devices};
-  my (%sequence, @ret);
+  my (%commandsPower, %commands, @ret);
   my(undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));
 
-  $sequence{"$_:on"} = "1".AttrVal($_, "delay_powerOn", $AVScene_defaultDelays{powerOn}) 
-    for(split(",", $devices));
-  $sequence{"$_:$inputSelection->{$_}"} = "0".AttrVal($_, "delay_input", $AVScene_defaultDelays{input}) 
-    for(keys %{$inputSelection});
+  if
+  ($command eq "on"){
+    # handle commands on
+    $commandsPower{"$_:on"} = AttrVal($_, "delay_powerOn", $AVScene_defaultDelays{powerOn}) 
+      for(split(",", $devices));
+    foreach (sort { $commandsPower{$b} <=> $commandsPower{$a} } keys %commandsPower) {
+      push(@ret, $_);
+    }
+    # handle commands input
+    $commands{"$_:$inputSelection->{$_}"} = AttrVal($_, "delay_input", $AVScene_defaultDelays{input}) 
+      for(keys %{$inputSelection});
+  }
 
-  foreach (sort { $sequence{$b} <=> $sequence{$a} } keys %sequence) {
+  # handle commands other
+  for (split("\n", AttrVal($SELF, "commands$Command", undef))){
+    $_ =~ m/(.+):.+/;
+    $commands{$_} = AttrVal($_, "delay_interKey", $AVScene_defaultDelays{interKey});
+  }
+  foreach (sort { $commands{$a} <=> $commands{$b} } keys %commands) {
     push(@ret, $_);
-  } 
+  }
 
-  return join("\n", @ret);
+  if
+  ($command eq "off"){
+    # handle commands off
+    $commandsPower{"$_:off"} = AttrVal($_, "delay_interKey", $AVScene_defaultDelays{interKey}) 
+      for(split(",", $devices));
+    foreach (sort { $commandsPower{$b} <=> $commandsPower{$a} } keys %commandsPower) {
+      push(@ret, $_);
+    }
+  }
+
+  return join("\n", @ret) if($get);
+
+  CommandAttr(undef, "$SELF sequence$Command ".join(",\n", @ret)) if(AttrVal($SELF, "autocreate", 1));
 }
 
 1;
