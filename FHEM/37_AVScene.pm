@@ -26,6 +26,14 @@ package main;
   use strict;
   use warnings;
 
+# variables ###################################################################
+my %AVScene_defaultDelays = (
+   "input"        => 1000
+  ,"interDevice"  =>  500
+  ,"inkerKey"     =>  100
+  ,"powerOn"      => 2000
+);
+
 # forward declarations ########################################################
 
 # initialize ##################################################################
@@ -41,13 +49,14 @@ sub AVScene_Initialize($) {
 
   $hash->{AttrList} = ""
     ."commands:textField-long "
+    ."configMode:1,0 "
     ."deviceVolume "
     ."deviceMedia "
     ."disable:1,0 "
     ."evalSpecials:textField-long "
-    ."inputSelection:textField "
-    ."sequeceOff:textField-long "
-    ."sequeceOn:textField-long "
+    ."inputSelection:textField-long "
+    ."sequeceOff:sortable "
+    ."sequeceOn:sortable "
     .$readingFnAttributes
   ;
 }
@@ -76,8 +85,10 @@ sub AVScene_Define($$) {
   AVScene_update_inputSelection($hash);
 
   setDevAttrList($SELF, "$DevAttrList");
-
+  
   readingsSingleUpdate($hash, "state", "Initialized", 1);
+
+  CommandAttr(undef, "$SELF configMode 1");
 
   return;
 
@@ -95,30 +106,38 @@ sub AVScene_Set($@) {
   my ($hash, @a) = @_;
   my $TYPE = $hash->{TYPE};
   my $MODE = $hash->{MODE};
+  my %AVScene_sets;
 
   return("\"set $TYPE\" needs at least one argument") if(@a < 2);
 
   my $SELF     = shift @a;
   my $argument = shift @a;
   my $value    = join(" ", @a) if (@a);
-  my %AVScene_sets = (
-     "channelDown"  => "channelDown:noArg"
-    ,"channelUp"    => "channelUp:noArg"
-    ,"deviceAdd"    => "deviceAdd:".join(",", devspec2array(".+"))
-    ,"deviceMedia"  => "deviceMedia:$hash->{devices}"
-    ,"deviceRemove" => "deviceRemove:$hash->{devices}"
-    ,"deviceVolume" => "deviceVolume:$hash->{devices}"
-    ,"mute"         => "mute:noArg"
-    ,"off"          => "off:noArg"
-    ,"on"           => "on:noArg"
-    ,"pause"        => "pause:noArg"
-    ,"play"         => "play:noArg"
-    ,"stop"         => "stop:noArg"
-    ,"updateInputSelection"       => "updateInputSelection:noArg"
-    ,"volumeDown"   => "volumeDown:noArg"
-    ,"volumeUp"     => "volumeUp:noArg"
-  );
-  %AVScene_sets = (%AVScene_sets, %{$hash->{inputSelection}});  
+  if
+  (AttrVal($SELF, "configMode", 0)){
+    %AVScene_sets = (
+       "deviceAdd"    => "deviceAdd:".join(",", devspec2array(".+"))
+      ,"deviceMedia"  => "deviceMedia:$hash->{devices}"
+      ,"deviceRemove" => "deviceRemove:$hash->{devices}"
+      ,"deviceVolume" => "deviceVolume:$hash->{devices}"
+      ,"updateInputSelection"       => "updateInputSelection:noArg"
+    );
+    %AVScene_sets = (%AVScene_sets, %{$hash->{inputSelection}});  
+  }
+  else{
+    %AVScene_sets = (
+       "channelDown"  => "channelDown:noArg"
+      ,"channelUp"    => "channelUp:noArg"
+      ,"mute"         => "mute:noArg"
+      ,"off"          => "off:noArg"
+      ,"on"           => "on:noArg"
+      ,"pause"        => "pause:noArg"
+      ,"play"         => "play:noArg"
+      ,"stop"         => "stop:noArg"
+      ,"volumeDown"   => "volumeDown:noArg"
+      ,"volumeUp"     => "volumeUp:noArg"
+    );
+  }
 
   return(
     "Unknown argument $argument, choose one of ".
@@ -131,7 +150,6 @@ sub AVScene_Set($@) {
   }
   elsif
   ($argument =~ /^(mute|volume(Down|Up))/){
-    Debug("triggered by $argument");
     CommandSet(undef, AttrVal($SELF, "deviceVolume", undef)." $argument");
   }
   elsif
@@ -173,10 +191,11 @@ sub AVScene_Set($@) {
 sub AVScene_Get($@) {
   my ($hash, @a) = @_;
   my $TYPE = $hash->{TYPE};
+  my $SELF = shift @a;
 
+  return unless(AttrVal($SELF, "configMode", 0));
   return("\"get $TYPE\" needs at least one argument") if(@a < 1);
 
-  my $SELF = shift @a;
   my $argument = shift @a;
   my $value = join(" ", @a) if (@a);
   my %AVScene_gets = (
@@ -189,6 +208,18 @@ sub AVScene_Get($@) {
     join(" ", sort(values %AVScene_gets))
   ) unless(exists($AVScene_gets{$argument}));
 
+  if
+  ($argument eq "defaultSequence"){
+    if
+    ($value eq "on"){
+      return AVScene_sequence_on($hash);
+      return("Not implemented yet :(");
+    }
+    elsif
+    ($value eq "off"){
+      $ret = "set $hash->{devices} off";
+    }
+  }
 
   return $ret;
 }
@@ -201,10 +232,6 @@ sub AVScene_Attr(@) {
   Log3($SELF, 5, "$TYPE ($SELF) - entering AVScene_Attr");
 
     # ."commands:textField-long "
-    # ."deviceVolume "
-    # ."deviceMedia "
-    # ."disable:1,0 "
-    # ."inputSelection:textField-long "
     # ."sequeceOff:textField-long "
     # ."sequeceOn:textField-long "
 
@@ -227,7 +254,6 @@ sub AVScene_evalSpecials($;$) {
   my $parseParams = $AttrVal || AttrVal($SELF, "evalSpecials", undef);
 
   Log3($SELF, 5, "$TYPE ($SELF) - entering AVScene_evalSpecials");
-  Debug("parseParams: $parseParams");
 
   my(undef, %evalSpecials) = parseParams($parseParams);
 
@@ -236,7 +262,7 @@ sub AVScene_evalSpecials($;$) {
   return;
 }
 
-sub AVScene_update_inputSelection($){
+sub AVScene_update_inputSelection($) {
   my ($hash) = @_;
   my $TYPE = $hash->{TYPE};
   my $SELF = $hash->{NAME};
@@ -253,16 +279,32 @@ sub AVScene_update_inputSelection($){
       $sets[$i] = join(",", map{"$1#$_"} split(",", $2));
     }
 
-    my $inputs = "input_$device:".join(",", sort(@sets));
-
-    Debug("$inputs");
-
     $inputSelection{"input_$device"} = "input_$device:".join(",", sort(@sets));
    }
 
   $hash->{inputSelection} = \%inputSelection;
 
   return;
+}
+
+sub AVScene_sequence_on($) {
+  my ($hash) = @_;
+  my $TYPE = $hash->{TYPE};
+  my $SELF = $hash->{NAME};
+  my $devices = $hash->{devices};
+  my (%sequence, @ret);
+  my(undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));
+
+  $sequence{"$_:on"} = "1".AttrVal($_, "delay_powerOn", $AVScene_defaultDelays{powerOn}) 
+    for(split(",", $devices));
+  $sequence{"$_:$inputSelection->{$_}"} = "0".AttrVal($_, "delay_input", $AVScene_defaultDelays{input}) 
+    for(keys %{$inputSelection});
+
+  foreach (sort { $sequence{$b} <=> $sequence{$a} } keys %sequence) {
+    push(@ret, $_);
+  } 
+
+  return join("\n", @ret);
 }
 
 1;

@@ -34,6 +34,7 @@ Steuerung:
 
 ## Attribute
  * `commands <command>:<FHEM command>`
+ * `configMode 1|0`
  * `deviceAudio <name>`
  * `deviceMedia <name>`
  * `disable 0|1`
