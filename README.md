@@ -7,6 +7,7 @@
 ## Set
 Erweiterung:
  * `commandsOn_<name>`
+ * `config done`
  * `deviceAdd <name>`
  * `deviceRemove <name>`
  * `deviceMedia <name>`
@@ -25,6 +26,7 @@ Steuerung:
  * `mute`
  * `channelUp`
  * `channelDown`
+ * `config`
  * weitere Befehle durch das `commands`-Attribut
 
 ## Get
