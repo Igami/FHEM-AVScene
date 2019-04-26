@@ -6,46 +6,54 @@
 
 ## Set
 Erweiterung:
- * `commandsOn_<name>`
- * `config done`
  * `deviceAdd <name>`
  * `deviceRemove <name>`
+ * `ignorePower <name>`
+ * `input_<name> <set>`
  * `deviceMedia <name>`
  * `deviceVolume <name>`
- * `input_<name>`
- * `updateInputSelection`
-
+ * `commandsOn_<name> <set>`
+ * `commandsOff_<name> <set>`
+ * `.delays_<name> powerOn:<value> input:<value> interKey:<value> interDevice:<value>`
+ * `config done`
+ 
 Steuerung:
- * `on`
- * `off`
- * `play`
- * `pause`
- * `stop`
- * `volumeUp`
- * `volumeDown`
- * `mute`
- * `channelUp`
- * `channelDown`
+ * sceneSwitcher
+    * `scene <name>`
+ * scene
+    * `on`
+    * `off`
+ * deviceMedia
+    * `play`
+    * `pause`
+    * `stop`
+    * `channelUp`
+    * `channelDown`
+ * deviceVolume
+    * `volumeUp`
+    * `volumeDown`
+    * `mute`
  * `config`
  * weitere Befehle durch das `commands`-Attribut
 
 ## Get
  * `defaultSequence on|off`
+ * `delays <name>`
 
 ## Readings
-* `state Initialized|play|pause|stop|off`
+* `state Initialized|on|off|play|pause|stop`
 
 ## Attribute
  * `autocreate 1|0`
  * `commands <command>:<FHEM command>`
- * `commandsOff <name>:<set>`
- * `commandsOn <name>:<set>`
- * `configMode 1|0`
+ * `commandsOff <name>:<set>,<name>:<set>,...`
+ * `commandsOn <name>:<set>,<name>:<set>,...`
  * `deviceAudio <name>`
  * `deviceMedia <name>`
  * `disable 0|1`
- * `evalSpecials <key>=<value>`
- * `inputSelection <name>=<FHEM command>`
- * `sequecneOn <name>:<FHEM command>`
- * `sequecneOff <name>:<FHEM command>`
+ * `evalSpecials <key1>=<value1> <key2>=<value2> ...`
+ * `ignorePower <dev1>,<dev2>,...`
+ * `inputSelection <name>=<set>,<name>=<set>,...`
+ * `sequecneOn <name>:<set>,<name>=<set>,...`
+ * `sequecneOff <name>:<set>,<name>=<set>,...`
  * [`readingFnAttributes`](#readingFnAttributes)
