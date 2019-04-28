@@ -28,10 +28,11 @@ package main;
 
 # variables ###################################################################
 my %AVScene_defaultDelays = (
-   "input"        => 1000
-  ,"interDevice"  =>  500
-  ,"interKey"     =>  100
-  ,"powerOn"      => 2000
+  "input"       => 1000,
+  "interDevice" =>  500,
+  "interKey"    =>  100,
+  "powerOff"    => 2000,
+  "powerOn"     => 2000
 );
 
 # forward declarations ########################################################
@@ -57,26 +58,25 @@ sub AVScene_Initialize($) {
   my $TYPE = "AVScene";
 
   $hash->{DefFn}    = $TYPE."_Define";
-  $hash->{UndefFn}  = $TYPE."_Undefine";
   $hash->{SetFn}    = $TYPE."_Set";
   $hash->{GetFn}    = $TYPE."_Get";
   $hash->{AttrFn}   = $TYPE."_Attr";
   $hash->{NotifyFn} = $TYPE."_Notify";
 
-  $hash->{AttrList} = ""
-    ."autocreate:1,0 "
-    ."commands:textField-long "
-    ."commandsOff:textField-long "
-    ."commandsOn:textField-long "
-    ."deviceVolume "
-    ."deviceMedia "
-    ."ignorePower:sortable "
-    ."disable:1,0 "
-    ."evalSpecials:textField-long "
-    ."inputSelection:textField-long "
-    ."sequenceOff:sortable "
-    ."sequenceOn:sortable "
-    .$readingFnAttributes
+  $hash->{AttrList} =
+    "autocreate:1,0 ".
+    "commands:textField-long ".
+    "commandsOff:sortable ".
+    "commandsOn:sortable ".
+    "deviceVolume ".
+    "deviceMedia ".
+    "ignorePower:sortable ".
+    "disable:1,0 ".
+    "evalSpecials:textField-long ".
+    "inputSelection:textField-long ".
+    "sequenceOff:sortable ".
+    "sequenceOn:sortable ".
+    $readingFnAttributes
   ;
 }
 
@@ -109,51 +109,60 @@ sub AVScene_Set($@) {
     if
     (ReadingsVal($SELF, ".config", 1)){
       %AVScene_sets = (
-         "config"       => "config:done"
-        ,"deviceAdd"    => "deviceAdd:".join(",", devspec2array("TYPE=$TYPE"))
-        ,"deviceRemove" => "deviceRemove:$hash->{devices}"
+        ".createNewScene" => ".createNewScene:textField",
+        "config"          => "config:done",
+        "deviceAdd"       => "deviceAdd:".join(",", devspec2array("TYPE=$TYPE:FILTER=NAME!=$SELF")),
+        "deviceRemove"    => "deviceRemove:$hash->{devices}"
       );
     }
     else{
       %AVScene_sets = (
-         "config"       => "config:noArg"
-        ,"scene"        => "scene:off,$hash->{devices}"
+        "config"       => "config:noArg",
+        "scene"        => "scene:off,$hash->{devices}"
       );
     }
   }
   elsif
   (ReadingsVal($SELF, ".config", 1)){
     %AVScene_sets = (
-       %{$hash->{commandsOn}}
-      ,%{$hash->{commandsOff}}
-      ,%{$hash->{inputSelection}}
-      ,%{$hash->{delays}}
-      ,"config"       => "config:done"
-      ,"deviceAdd"    => "deviceAdd:".join(",", devspec2array("room!=hidden"))
-      ,"deviceMedia"  => "deviceMedia:$hash->{devices}"
-      ,"deviceRemove" => "deviceRemove:$hash->{devices}"
-      ,"deviceVolume" => "deviceVolume:$hash->{devices}"
-      ,"ignorePower"  => "ignorePower:$hash->{devices}"
-      ,"updateDeviceCommands" => "updateDeviceCommands:noArg"
+      %{$hash->{commandsOn}},
+      %{$hash->{commandsOff}},
+      %{$hash->{inputSelection}},
+      %{$hash->{delays}},
+      "config"        => "config:done",
+      "deviceAdd"     => "deviceAdd:".join(",", devspec2array("room!=hidden:FILTER=NAME!=$SELF")),
+      ".deviceMedia"  => ".deviceMedia:$hash->{devices}",
+      "deviceRemove"  => "deviceRemove:$hash->{devices}",
+      ".deviceVolume" => ".deviceVolume:$hash->{devices}",
+      "ignorePower"   => "ignorePower:$hash->{devices}",
+      "updateDeviceCommands" => "updateDeviceCommands:noArg"
     );
   }
   else{
     %AVScene_sets = (
-       "config"       => "config:noArg"
-      ,"off"          => "off:noArg"
-      ,"on"           => "on:noArg"
+      "config"      => "config:noArg",
+      "off"         => "off:noArg",
+      "on"          => "on:noArg"
     );
-    %AVScene_sets = (%AVScene_sets
-      ,"mute"         => "mute:noArg"
-      ,"volumeDown"   => "volumeDown:noArg"
-      ,"volumeUp"     => "volumeUp:noArg"
+    %AVScene_sets = (
+      %AVScene_sets,
+      "mute"        => "mute:noArg",
+      "volumeDown"  => "volumeDown:noArg",
+      "volumeUp"    => "volumeUp:noArg"
     ) if(AttrVal($SELF, "deviceVolume", undef));
-    %AVScene_sets = (%AVScene_sets
-      ,"channelDown"  => "channelDown:noArg"
-      ,"channelUp"    => "channelUp:noArg"
-      ,"pause"        => "pause:noArg"
-      ,"play"         => "play:noArg"
-      ,"stop"         => "stop:noArg"
+    %AVScene_sets = (
+      %AVScene_sets,
+      "play"        => "play:noArg",
+      "pause"       => "pause:noArg",
+      "stop"        => "stop:noArg",
+      "next"        => "next:noArg",
+      "prev"        => "prev:noArg",
+      "left"        => "left:noArg",
+      "right"       => "right:noArg",
+      "up"          => "up:noArg",
+      "down"        => "down:noArg",
+      "back"        => "back:noArg",
+      "enter"       => "enter:noArg"
     ) if(AttrVal($SELF, "deviceMedia", undef));
   }
 
@@ -194,7 +203,7 @@ sub AVScene_Set($@) {
   ($argument =~ /^device(Add|Remove)$/){
     my %devices = map{$_, 1} split(",", $hash->{devices}.",$value");
     delete $devices{$value} if($argument eq "deviceRemove");
-    my $devices = join(" ", sort(keys %devices));
+    my $devices = ($hash->{type} eq "sceneSwitcher" ? "switcher " : "").join(" ", sort(keys %devices));
 
     CommandDefMod(undef, "$SELF $TYPE $devices");
   }
@@ -222,8 +231,9 @@ sub AVScene_Set($@) {
     AVScene_update_deviceCommands($hash);
   }
   elsif
-  ($argument =~ /^device(Media|Volume)$/){
-    CommandAttr(undef, "$SELF $argument $value");
+  ($argument =~ /^.(device(Media|Volume))$/){
+    readingsSingleUpdate($hash, $argument, $value, 0);
+    CommandAttr(undef, "$SELF $1 $value");
   }
   elsif
   ($argument eq "ignorePower"){
@@ -234,11 +244,30 @@ sub AVScene_Set($@) {
     my @commands = AttrVal($SELF, "commands$1", undef);
     push(@commands, "$2:$value");
 
-    CommandAttr(undef, "$SELF commands$1 ".join("\n", sort @commands));
+    CommandAttr(undef, "$SELF commands$1 ".join(",", sort @commands));
   }
   elsif
   ($argument eq "updateDeviceCommands"){
     AVScene_update_deviceCommands($hash);
+  }
+  elsif
+  ($argument eq ".createNewScene"){
+    my ($name, $copy, $rest) = split(/[\s]+/, $value);
+
+    if
+    ($copy){
+      return("$name is not defined") unless($defs{$name});
+      return("$copy already defined") if($defs{$copy});
+      return("$name ist no $TYPE device") if($defs{$name}->{TYPE} ne $TYPE);
+
+      CommandSet(undef, "$SELF deviceAdd $copy");
+      return(fhem("copy $name $copy ".($rest||"")));
+    }
+    else{
+      return("$name already defined") if($defs{$name});
+      CommandSet(undef, "$SELF deviceAdd $name");
+      return(CommandDefine(undef, "$name $TYPE"));
+    }
   }
 
   return;
@@ -255,8 +284,8 @@ sub AVScene_Get($@) {
   my $argument = shift @a;
   my $value = join(" ", @a) if (@a);
   my %AVScene_gets = (
-     "defaultSequence"   => "defaultSequence:on,off"
-    ,"delays"            => "delays:$hash->{devices}"
+    "defaultSequence"   => "defaultSequence:on,off",
+    "delays"            => "delays:$hash->{devices}"
   );
   my $ret;
 
@@ -273,12 +302,12 @@ sub AVScene_Get($@) {
   ($argument eq "delays"){
     return(
       join("\n",
-         "$value delays (ms)"
-        ,""
-        ,"powerOn:     ".AttrVal($value, "delay_powerOn",     "$AVScene_defaultDelays{powerOn} (default)")
-        ,"input:       ".AttrVal($value, "delay_input",       "$AVScene_defaultDelays{input} (default)")
-        ,"interKey:    ".AttrVal($value, "delay_interKey",    "$AVScene_defaultDelays{interKey} (default)")
-        ,"interDevice: ".AttrVal($value, "delay_interDevice", "$AVScene_defaultDelays{interDevice} (default)")
+        "$value delays (ms)",
+        "",
+        "powerOn:     ".AttrVal($value, "delay_powerOn",     "$AVScene_defaultDelays{powerOn} (default)"),
+        "input:       ".AttrVal($value, "delay_input",       "$AVScene_defaultDelays{input} (default)"),
+        "interKey:    ".AttrVal($value, "delay_interKey",    "$AVScene_defaultDelays{interKey} (default)"),
+        "interDevice: ".AttrVal($value, "delay_interDevice", "$AVScene_defaultDelays{interDevice} (default)")
       )
     )
   }
@@ -304,10 +333,18 @@ sub AVScene_Attr(@) {
   }
   elsif
   ($argument eq "commandsOff"){
+    $value =~ s/\n//g;
+    $value =~ s/,/,\n/g;
+    $_[3] = $value;
+
     InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|off");
   }
   elsif
   ($argument eq "commandsOn"){
+    $value =~ s/\n//g;
+    $value =~ s/,/,\n/g;
+    $_[3] = $value;
+
     InternalTimer(gettimeofday()+0.001, "AVScene_sequence_power", "$SELF|on");
   }
   elsif
@@ -366,11 +403,16 @@ sub AVScene_DefineInInitDone($) {
   my ($hash) = @_;
   my $SELF = $hash->{NAME};
   my $TYPE = $hash->{TYPE};
-  my $devices = join(",", sort(split(" ", $hash->{DEF})));
+  my @devices = split(" ", $hash->{DEF});
+  my $type = "scene";
 
-  my $type = devspec2array("$devices:FILTER=TYPE!=$TYPE") ? "scene" : "sceneSwitcher";
+  if
+  ($devices[0] eq "switcher"){
+    shift @devices;
+    $type = "sceneSwitcher";
+  }
 
-  $hash->{devices} = $devices;
+  $hash->{devices} = join(",", sort(@devices));
   $hash->{type} = $type;
 
   readingsSingleUpdate($hash, "state", "Initialized", 1);
@@ -473,7 +515,7 @@ sub AVScene_sequence_power($) {
   }
 
   # handle commands other
-  for (split("\n", AttrVal($SELF, "commands$Command", ""))){
+  for (split(",\n", AttrVal($SELF, "commands$Command", ""))){
     $_ =~ m/(.+):.+/;
     $commands{$_} = AttrVal($1, "delay_interKey", $AVScene_defaultDelays{interKey});
   }
@@ -522,15 +564,15 @@ sub AVScene_update_deviceCommands($) {
     addToDevAttrList($device, $_) for("delay_powerOn", "delay_input", "delay_interKey", "delay_interDevice");
     readingsBulkUpdate(
       $hash, ".delays_$device", join("\n",
-         "powerOn="    .AttrVal($device, "delay_powerOn",     "default")
-        ,"input="      .AttrVal($device, "delay_input",       "default")
-        ,"interKey="   .AttrVal($device, "delay_interKey",    "default")
-        ,"interDevice=".AttrVal($device, "delay_interDevice", "default")
+        "powerOn="    .AttrVal($device, "delay_powerOn",     "default"),
+        "input="      .AttrVal($device, "delay_input",       "default"),
+        "interKey="   .AttrVal($device, "delay_interKey",    "default"),
+        "interDevice=".AttrVal($device, "delay_interDevice", "default")
       )
     );
     $delays{".delays_$device"}  = ".delays_$device:textField-long";
 
-    my @sets = split(" ", CommandSet(undef , "$device ?"));
+    my @sets = split(" ", CommandSet(undef, "$device ?"));
     splice(@sets, 0, 6);
 
     next unless(@sets);
