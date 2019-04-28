@@ -185,7 +185,7 @@ sub AVScene_Set($@) {
   }
   elsif
   ($argument eq "scene"){
-    AVScene_switchScene($hash, $value);
+    return AVScene_switchScene($hash, $value);
   }
   elsif
   ($argument eq "config"){
@@ -453,13 +453,17 @@ sub AVScene_handleSequence($$) {
   my $SELF = $hash->{NAME};
   my $TYPE = $hash->{TYPE};
   my $scene = ReadingsVal($SELF, "scene", $SELF);
-  my %devices;
+  my (%devices, $now);
 
   Log3($SELF, 5, "$TYPE ($SELF) - entering AVScene_handleSequence");
 
-  my (undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));
+  my (undef, $inputSelection) = parseParams(AttrVal($scene, "inputSelection", undef));
   my @sequence = AttrVal($SELF, "sequence".ucfirst($sequence), ReadingsVal($SELF, ".sequence".ucfirst($sequence), undef));
   $sequence[0] =~ s/\n//g;
+
+  return unless($sequence[0]);
+
+  @sequence = split(",", $sequence[0]);
 
   foreach (@sequence){
     $_ =~ m/([^:]*):(.+)/;
@@ -468,34 +472,44 @@ sub AVScene_handleSequence($$) {
 
   my %delay = map{$_, 0} keys %devices;
 
-  return unless($sequence[0]);
-
   readingsSingleUpdate($hash, "state", "executing", 1);
 
-  @sequence = split(",", $sequence[0]);
   for (my $i=0; $i<int(@sequence); $i++){
     $sequence[$i] =~ m/(.+):(.+)/;
     $sequence[$i] = "sleep ".($delay{$1}/1000)."; set $1 $2;";
 
     foreach my $device (keys %delay){
       next if($device eq $1);
-      $delay{$device} = max($delay{$device}, ($delay{$1}+AttrVal($1, "delay_interDevice", $AVScene_defaultDelays{interDevice})));
+      my $newDelay = $delay{$device}-$delay{$1};
+      my $delay_interDevice = AttrVal($1, "delay_interDevice", $AVScene_defaultDelays{interDevice});
+
+      $delay{$device} = $newDelay > $delay_interDevice ? $newDelay : $delay_interDevice;
     }
 
     if
     ($2 eq "on"){
-      $delay{$1} += AttrVal($1, "delay_powerOn", $AVScene_defaultDelays{powerOn});
+      $delay{$1} = AttrVal($1, "delay_powerOn", $AVScene_defaultDelays{powerOn});
     }
     elsif
     (%{$inputSelection}{$1} eq $2){
-      $delay{$1} += AttrVal($1, "delay_input", $AVScene_defaultDelays{input});
+      $delay{$1} = AttrVal($1, "delay_input", $AVScene_defaultDelays{input});
     }
     else{
-      $delay{$1} += AttrVal($1, "delay_interKey", $AVScene_defaultDelays{interKey});
+      $delay{$1} = AttrVal($1, "delay_interKey", $AVScene_defaultDelays{interKey});
     }
   }
 
-  push(@sequence, "sleep ".(max(values %delay)/1000)."; setreading $SELF state ".ReadingsVal($SELF, "scene", $sequence).";");
+  my $maxDelay = ($delay{(sort {$delay{$b} <=> $delay{$a}} keys %delay)[0]}/1000);
+  push(@sequence, "sleep $maxDelay; setreading $SELF state ".ReadingsVal($SELF, "scene", $sequence).";");
+
+  if
+  ($sequence eq "switch"){
+    $scene = ReadingsVal($SELF, "scene", "off");
+    my $previousScene = ReadingsVal($SELF, "previousScene", "off");
+
+    push(@sequence, "setreading $previousScene state off;") if($previousScene ne "off");
+    push(@sequence, "setreading $scene state on;") if($scene ne "off");
+  }
 
   AnalyzeCommandChain(undef, join(" ", @sequence));
 }
@@ -554,6 +568,13 @@ sub AVScene_switchScene($$) {
   my ($hash, $scene) = @_;
   my $TYPE = $hash->{TYPE};
   my $SELF = $hash->{NAME};
+
+  unless
+  ($scene eq "off"){
+    return("$scene is not defined") unless($defs{$scene});
+    return("$scene ist no $TYPE device") if($defs{$scene}->{TYPE} ne $TYPE);
+  }
+
   my $previousScene = ReadingsVal($SELF, "scene", "off");
   my (%sequenceOn, %sequenceOff);
 
