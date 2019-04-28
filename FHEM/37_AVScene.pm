@@ -49,7 +49,7 @@ sub AVScene_diff($$);
 sub AVScene_evalSpecials($;$);
 sub AVScene_handleSequence($$);
 sub AVScene_sequence_power($);
-sub AVScene_switchScene($);
+sub AVScene_switchScene($$);
 sub AVScene_update_deviceCommands($);
 
 # initialize ##################################################################
@@ -83,10 +83,9 @@ sub AVScene_Initialize($) {
 # regular Fn ##################################################################
 sub AVScene_Define($$) {
   my ($hash, $def) = @_;
-  my ($SELF, $TYPE, @devices) = split(/[\s]+/, $def);
+  my ($SELF, $TYPE, $devices) = split(/[\s]+/, $def);
 
-  my $devices = join(",", sort(@devices));
-
+  return("$SELF needs at least one device to handle") unless($devices);
   return("It's not allowed to add AVScene to itself.") if($devices =~ /$SELF/);
 
   AVScene_DefineInInitDone($hash);
@@ -186,7 +185,7 @@ sub AVScene_Set($@) {
   }
   elsif
   ($argument eq "scene"){
-    AVScene_switchScene($hash);
+    AVScene_switchScene($hash, $value);
   }
   elsif
   ($argument eq "config"){
@@ -266,7 +265,7 @@ sub AVScene_Set($@) {
     else{
       return("$name already defined") if($defs{$name});
       CommandSet(undef, "$SELF deviceAdd $name");
-      return(CommandDefine(undef, "$name $TYPE"));
+      return(CommandDefine(undef, "$name $TYPE undef"));
     }
   }
 
@@ -403,7 +402,7 @@ sub AVScene_DefineInInitDone($) {
   my ($hash) = @_;
   my $SELF = $hash->{NAME};
   my $TYPE = $hash->{TYPE};
-  my @devices = split(" ", $hash->{DEF});
+  my @devices = split(/\s+/, $hash->{DEF});
   my $type = "scene";
 
   if
@@ -423,6 +422,8 @@ sub AVScene_DefineInInitDone($) {
 
   AVScene_sequence_power("$SELF|on");
   AVScene_sequence_power("$SELF|off");
+
+  return;
 }
 
 sub AVScene_diff($$) {
@@ -451,13 +452,21 @@ sub AVScene_handleSequence($$) {
   my ($hash, $sequence) = @_;
   my $SELF = $hash->{NAME};
   my $TYPE = $hash->{TYPE};
+  my $scene = ReadingsVal($SELF, "scene", $SELF);
+  my %devices;
 
   Log3($SELF, 5, "$TYPE ($SELF) - entering AVScene_handleSequence");
 
-  my (undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));  
-  my @sequence = AttrVal($SELF, "sequence".ucfirst($sequence), undef);
+  my (undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));
+  my @sequence = AttrVal($SELF, "sequence".ucfirst($sequence), ReadingsVal($SELF, ".sequence".ucfirst($sequence), undef));
   $sequence[0] =~ s/\n//g;
-  my %delay = map{$_, 0} split(",", $hash->{devices});
+
+  foreach (@sequence){
+    $_ =~ m/([^:]*):(.+)/;
+    $devices{$1} = 1;
+  }
+
+  my %delay = map{$_, 0} keys %devices;
 
   return unless($sequence[0]);
 
@@ -485,8 +494,8 @@ sub AVScene_handleSequence($$) {
       $delay{$1} += AttrVal($1, "delay_interKey", $AVScene_defaultDelays{interKey});
     }
   }
-  
-  push(@sequence, "sleep ".(max(values %delay)/1000)."; setreading $SELF state $sequence;");
+
+  push(@sequence, "sleep ".(max(values %delay)/1000)."; setreading $SELF state ".ReadingsVal($SELF, "scene", $sequence).";");
 
   AnalyzeCommandChain(undef, join(" ", @sequence));
 }
@@ -497,7 +506,7 @@ sub AVScene_sequence_power($) {
   my ($hash) = $defs{$SELF};
   my $TYPE = $hash->{TYPE};
   my $devices = $hash->{devices};
-  my @devicesPower = split(",", AVScene_diff($devices, AttrVal($SELF, "ignorePower", undef)));
+  my @devicesPower = split(",", AVScene_diff($devices, AttrVal($SELF, "ignorePower", "")));
   my (%commandsPower, %commands, @ret);
   my(undef, $inputSelection) = parseParams(AttrVal($SELF, "inputSelection", undef));
 
@@ -541,12 +550,38 @@ sub AVScene_sequence_power($) {
   CommandAttr(undef, "$SELF $argument $value") if(AttrVal($SELF, "autocreate", 1) && AttrVal($SELF, "argumen", "") ne $value);
 }
 
-sub AVScene_switchScene($) {
-  my ($hash) = @_;
+sub AVScene_switchScene($$) {
+  my ($hash, $scene) = @_;
+  my $TYPE = $hash->{TYPE};
+  my $SELF = $hash->{NAME};
+  my $previousScene = ReadingsVal($SELF, "scene", "off");
+  my (%sequenceOn, %sequenceOff);
 
-  # get current scene
-  # execute ("sequenceOn next" - "sequenceOn current")
-  # executing("sequenceOff current" - "devices next")
+  my @sequenceOn = split(/,\s*/, AttrVal($scene, "sequenceOn", ""));
+  @sequenceOn{@sequenceOn} = 0..$#sequenceOn;
+  delete $sequenceOn{$_} foreach (split(/,\s*/, AttrVal($previousScene, "sequenceOn", "")));
+
+  my %devices = map{$_, 1} split(",", InternalVal($scene, "devices", ""));
+  my @sequenceOff = split(/,\s*/, AttrVal($previousScene, "sequenceOff", ""));
+  @sequenceOff{@sequenceOff} = 0..$#sequenceOff;
+
+  foreach (keys %sequenceOff){
+    $_ =~ m/([^:]*):(.+)/;
+    delete $sequenceOff{$_} if($devices{$1});
+  }
+
+  readingsBeginUpdate($hash);
+  readingsBulkUpdate($hash, "previousScene", $previousScene);
+  readingsBulkUpdate($hash, "scene", $scene);
+  readingsBulkUpdate(
+    $hash, ".sequenceSwitch", join(",\n", 
+      sort {$sequenceOn{$a} <=> $sequenceOn{$b}} keys %sequenceOn,
+      sort {$sequenceOff{$a} <=> $sequenceOff{$b}} keys %sequenceOff
+    )
+  );
+  readingsEndUpdate($hash, 1);
+
+  AVScene_handleSequence($hash, "switch");
 
   return;
 }
