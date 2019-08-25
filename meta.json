@@ -1,0 +1,72 @@
+{
+    "abstract": "FHEM module for the logic of a universal remote control",
+    "x_lang": {
+        "de": {
+            "abstract": "FHEM-Modul für die Logik einer Universalfernbedienung"
+        }
+    },
+    "keywords": [
+        "AVScene",
+        "Multimedia",
+        "AV",
+        "Harmony",
+        "Itach",
+        "IRBlaster"
+    ],
+    "release_status": "development",
+    "license": "GPL-2.0",
+    "version": "0.1.0",
+    "author": [
+        "igami"
+    ],
+    "resources": {
+        "homepage": "https://github.com/fhem/mod-AVScene/",
+        "x_homepage_title": "Module homepage",
+        "license": [
+            "https://github.com/fhem/mod-AVScene/blob/master/LICENSE"
+        ],
+        "bugtracker": {
+            "web": "https://github.com/fhem/mod-AVScene/issues"
+        },
+        "repository": {
+            "type": "git",
+            "url": "https://github.com/fhem/mod-AVScene.git",
+            "web": "https://github.com/fhem/mod-AVScene.git",
+            "x_branch": "master",
+            "x_development": {
+                "type": "git",
+                "url": "https://github.com/fhem/mod-AVScene.git",
+                "web": "https://github.com/fhem/mod-AVScene/tree/development",
+                "x_branch": "development"
+            },
+            "x_filepath": "",
+            "x_raw": ""
+        },
+        "x_wiki": {
+            "title": "",
+            "web": ""
+        }
+    },
+    "x_fhem_maintainer": [
+        "igami"
+    ],
+    "x_fhem_maintainer_github": [
+        "igami"
+    ],
+    "prereqs": {
+        "runtime": {
+            "requires": {
+                "FHEM": 5.00918799,
+                "perl": 5.10,
+                "Meta": 0,
+                "JSON": 0
+            },
+            "recommends": {
+            
+            },
+            "suggests": {
+            
+            }
+        }
+    }
+}
